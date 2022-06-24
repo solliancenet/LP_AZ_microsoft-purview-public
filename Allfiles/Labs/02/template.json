@@ -90,84 +90,6 @@
       }
     },
     {
-      "type": "Microsoft.KeyVault/vaults",
-      "apiVersion": "2018-02-14",
-      "name": "[variables('keyVaultName')]",
-      "location": "[variables('location')]",
-      "properties": {
-        "tenantId": "[subscription().tenantId]",
-        "sku": {
-          "name": "standard",
-          "family": "A"
-        },
-        "accessPolicies": [
-          {
-            "tenantId": "[subscription().tenantid]",
-            "objectId": "##SIGNED_IN_USER_ID##",
-            "permissions": {
-              "keys": [],
-              "secrets": [
-                "get",
-                "list",
-                "set"
-              ],
-              "certificates": []
-            }
-          },
-          {
-            "tenantId": "[subscription().tenantid]",
-            "objectId": "##SIGNED_IN_USER_ID##",
-            "permissions": {
-              "keys": [],
-              "secrets": [
-                "get",
-                "list",
-                "set"
-              ],
-              "certificates": []
-            }
-          },
-          {
-            "tenantId": "[subscription().tenantid]",
-            "objectId": "##SIGNED_IN_USER_ID##",
-            "permissions": {
-              "keys": [],
-              "secrets": [
-                "get",
-                "list",
-                "set"
-              ],
-              "certificates": []
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "name": "[concat(variables('keyVaultName'), '/SqlPassword')]",
-      "apiVersion": "2018-02-14",
-      "location": "[variables('location')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
-      ],
-      "properties": {
-        "value": "[parameters('sqlAdministratorLoginPassword')]"
-      }
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "name": "[concat(variables('keyVaultName'), '/SQL-USER-ASA')]",
-      "apiVersion": "2018-02-14",
-      "location": "[variables('location')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
-      ],
-      "properties": {
-        "value": "[parameters('sqlAdministratorLoginPassword')]"
-      }
-    },
-    {
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2019-06-01",
       "name": "[variables('adlsStorageAccountName')]",
@@ -252,7 +174,7 @@
     },
     {
       "type": "Microsoft.Synapse/workspaces",
-      "apiVersion": "2019-06-01-preview",
+      "apiVersion": "2021-06-01",
       "name": "[variables('workspaceName')]",
       "location": "[variables('location')]",
       "dependsOn": [
@@ -393,6 +315,88 @@
       ],
       "properties": {
         "publicAccess": "None"
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2018-02-14",
+      "name": "[variables('keyVaultName')]",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Synapse/workspaces/', variables('workspaceName'))]",
+        "[concat('Microsoft.Purview/accounts/', variables('purviewAccountName'))]"
+      ],
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "name": "standard",
+          "family": "A"
+        },
+        "accessPolicies": [
+          {
+            "tenantId": "[subscription().tenantid]",
+            "objectId": "##SIGNED_IN_USER_ID##",
+            "permissions": {
+              "keys": [],
+              "secrets": [
+                "get",
+                "list",
+                "set"
+              ],
+              "certificates": []
+            }
+          },
+          {
+            "tenantId": "[subscription().tenantid]",
+            "objectId": "[reference(resourceId('Microsoft.Purview/accounts', variables('purviewAccountName')), '2021-12-01', 'Full').identity.principalId]",
+            "permissions": {
+              "keys": [],
+              "secrets": [
+                "get",
+                "list",
+                "set"
+              ],
+              "certificates": []
+            }
+          },
+          {
+            "tenantId": "[subscription().tenantid]",
+            "objectId": "[reference(resourceId('Microsoft.Synapse/workspaces', variables('workspaceName')), '2021-06-01', 'Full').identity.principalId]",
+            "permissions": {
+              "keys": [],
+              "secrets": [
+                "get",
+                "list",
+                "set"
+              ],
+              "certificates": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "name": "[concat(variables('keyVaultName'), '/SqlPassword')]",
+      "apiVersion": "2018-02-14",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+      ],
+      "properties": {
+        "value": "[parameters('sqlAdministratorLoginPassword')]"
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "name": "[concat(variables('keyVaultName'), '/SQL-USER-ASA')]",
+      "apiVersion": "2018-02-14",
+      "location": "[variables('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+      ],
+      "properties": {
+        "value": "[parameters('sqlAdministratorLoginPassword')]"
       }
     }
   ],

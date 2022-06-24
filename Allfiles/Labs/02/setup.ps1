@@ -79,11 +79,12 @@ $resourceGroupLocation = (Get-AzResourceGroup -Name $resourceGroupName).Location
 $subscriptionId = (Get-AzContext).Subscription.Id
 $tenantId = (Get-AzContext).Tenant.Id
 $global:logindomain = (Get-AzContext).Tenant.Id;
-$global:sqlEndpoint = "$($workspaceName).sql.azuresynapse.net"
+$global:sqlEndpoint = "$($synapseWorkspaceName).sql.azuresynapse.net"
 $global:sqlUser = "asa.sql.admin"
 $global:sqlPassword = $sqlAdminPassword
 
-$workspaceName = "asaworkspace$($uniqueId)"
+$synapseWorkspaceName = "asaworkspace$($uniqueId)"
+$purviewAccountName = "asapurview$($uniqueId)"
 $dataLakeAccountName = "asadatalake$($uniqueId)"
 $blobStorageAccountName = "asastore$($uniqueId)"
 $keyVaultName = "asakeyvault$($uniqueId)"
@@ -136,70 +137,70 @@ foreach ($dataDirectory in $dataDirectories.Keys) {
 
 Write-Information "Start the $($sqlPoolName) SQL pool if needed."
 
-$result = Get-SQLPool -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $workspaceName -SQLPoolName $sqlPoolName
+$result = Get-SQLPool -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $synapseWorkspaceName -SQLPoolName $sqlPoolName
 if ($result.properties.status -ne "Online") {
-    Control-SQLPool -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $workspaceName -SQLPoolName $sqlPoolName -Action resume
-    Wait-ForSQLPool -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $workspaceName -SQLPoolName $sqlPoolName -TargetStatus Online
+    Control-SQLPool -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $synapseWorkspaceName -SQLPoolName $sqlPoolName -Action resume
+    Wait-ForSQLPool -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $synapseWorkspaceName -SQLPoolName $sqlPoolName -TargetStatus Online
 }
 
 Write-Information "Create SQL logins in master SQL pool"
 
 $params = @{ PASSWORD = $sqlAdminPassword }
-$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $workspaceName -SQLPoolName "master" -FileName "01-create-logins" -Parameters $params
+$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $synapseWorkspaceName -SQLPoolName "master" -FileName "01-create-logins" -Parameters $params
 $result
 
 Write-Information "Create SQL users and role assignments in $($sqlPoolName)"
 
 $params = @{ USER_NAME = $aadUserName }
-$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $workspaceName -SQLPoolName $sqlPoolName -FileName "02-create-users" -Parameters $params
+$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $synapseWorkspaceName -SQLPoolName $sqlPoolName -FileName "02-create-users" -Parameters $params
 $result
 
 Write-Information "Create schemas in $($sqlPoolName)"
 
 $params = @{}
-$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $workspaceName -SQLPoolName $sqlPoolName -FileName "03-create-schemas" -Parameters $params
+$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $synapseWorkspaceName -SQLPoolName $sqlPoolName -FileName "03-create-schemas" -Parameters $params
 $result
 
 Write-Information "Create tables in the [wwi] schema in $($sqlPoolName)"
 
 $params = @{}
-$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $workspaceName -SQLPoolName $sqlPoolName -FileName "04-create-tables-in-wwi-schema" -Parameters $params
+$result = Execute-SQLScriptFile -SQLScriptsPath $sqlScriptsPath -WorkspaceName $synapseWorkspaceName -SQLPoolName $sqlPoolName -FileName "04-create-tables-in-wwi-schema" -Parameters $params
 $result
 
 
 Write-Information "Create KeyVault linked service $($keyVaultName)"
 
-$result = Create-KeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $keyVaultName
-Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+$result = Create-KeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $synapseWorkspaceName -Name $keyVaultName
+Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 
 Write-Information "Create Integration Runtime $($integrationRuntimeName)"
 
-$result = Create-IntegrationRuntime -TemplatesPath $templatesPath -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $workspaceName -Name $integrationRuntimeName -CoreCount 16 -TimeToLive 60
-Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+$result = Create-IntegrationRuntime -TemplatesPath $templatesPath -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -WorkspaceName $synapseWorkspaceName -Name $integrationRuntimeName -CoreCount 16 -TimeToLive 60
+Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 
 Write-Information "Create Data Lake linked service $($dataLakeAccountName)"
 
-$result = Create-DataLakeLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $dataLakeAccountName  -Key $dataLakeStorageAccountKey
-Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+$result = Create-DataLakeLinkedService -TemplatesPath $templatesPath -WorkspaceName $synapseWorkspaceName -Name $dataLakeAccountName  -Key $dataLakeStorageAccountKey
+Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 
 Write-Information "Create Blob Storage linked service $($blobStorageAccountName)"
 
-$result = Create-BlobStorageLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $blobStorageAccountName  -Key $blobStorageAccountKey
-Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+$result = Create-BlobStorageLinkedService -TemplatesPath $templatesPath -WorkspaceName $synapseWorkspaceName -Name $blobStorageAccountName  -Key $blobStorageAccountKey
+Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 
 Write-Information "Create linked service for SQL pool $($sqlPoolName) with user asa.sql.admin"
 
 $linkedServiceName = $sqlPoolName.ToLower()
-$result = Create-SQLPoolKeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $linkedServiceName -DatabaseName $sqlPoolName `
+$result = Create-SQLPoolKeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $synapseWorkspaceName -Name $linkedServiceName -DatabaseName $sqlPoolName `
                  -UserName "asa.sql.admin" -KeyVaultLinkedServiceName $keyVaultName -SecretName $keyVaultSQLUserSecretName
-Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 
 Write-Information "Create linked service for SQL pool $($sqlPoolName) with user asa.sql.highperf"
 
 $linkedServiceName = "$($sqlPoolName.ToLower())_highperf"
-$result = Create-SQLPoolKeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $linkedServiceName -DatabaseName $sqlPoolName `
+$result = Create-SQLPoolKeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $synapseWorkspaceName -Name $linkedServiceName -DatabaseName $sqlPoolName `
                  -UserName "asa.sql.highperf" -KeyVaultLinkedServiceName $keyVaultName -SecretName $keyVaultSQLUserSecretName
-Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 
 Write-Information "Create data sets for data load in SQL pool $($sqlPoolName)"
 
@@ -214,8 +215,8 @@ $loadingDatasets = @{
 
 foreach ($dataset in $loadingDatasets.Keys) {
         Write-Information "Creating dataset $($dataset)"
-        $result = Create-Dataset -DatasetsPath $datasetsPath -WorkspaceName $workspaceName -Name $dataset -LinkedServiceName $loadingDatasets[$dataset]
-        Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+        $result = Create-Dataset -DatasetsPath $datasetsPath -WorkspaceName $synapseWorkspaceName -Name $dataset -LinkedServiceName $loadingDatasets[$dataset]
+        Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 }
 
 Write-Information "Create pipeline to load the SQL pool"
@@ -228,11 +229,13 @@ $fileName = "load_sql_pool_from_data_lake"
 
 Write-Information "Creating pipeline $($loadingPipelineName)"
 
-$result = Create-Pipeline -PipelinesPath $pipelinesPath -WorkspaceName $workspaceName -Name $loadingPipelineName -FileName $fileName -Parameters $params
-Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+$result = Create-Pipeline -PipelinesPath $pipelinesPath -WorkspaceName $synapseWorkspaceName -Name $loadingPipelineName -FileName $fileName -Parameters $params
+Wait-ForOperation -WorkspaceName $synapseWorkspaceName -OperationId $result.operationId
 
 Write-Information "Running pipeline $($loadingPipelineName)"
 
-$result = Run-Pipeline -WorkspaceName $workspaceName -Name $loadingPipelineName
-$result = Wait-ForPipelineRun -WorkspaceName $workspaceName -RunId $result.runId
+$result = Run-Pipeline -WorkspaceName $synapseWorkspaceName -Name $loadingPipelineName
+$result = Wait-ForPipelineRun -WorkspaceName $synapseWorkspaceName -RunId $result.runId
 $result
+
+Add-PurviewRoleMember -AccountName $purviewAccountName -RoleName "Data curators" -ServicePrincipalId "96fe3d5c-08da-42cc-b36d-c52cc87fcd13"

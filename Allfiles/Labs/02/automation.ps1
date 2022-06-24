@@ -595,3 +595,63 @@ function Wait-ForPipelineRun {
 
     return $result
 }
+
+function Get-PurviewMetadataPolicy()
+{
+    param(
+
+    [parameter(Mandatory=$true)]
+    [String]
+    $AccountName
+
+    )
+
+    $type = "metadatapolicy";
+    $rootUrl = "https://$AccountName.purview.azure.com";
+
+    $url = "$rootUrl/policyStore/metadataPolicies?api-version=2021-07-01-preview";
+
+    $data = Invoke-RestMethod -Method get -Uri $url -Headers @{"Authorization"="Bearer $global:purviewToken"}
+
+    return $data.values;
+}
+
+function Add-PurviewRoleMember()
+{
+    param(
+
+    [parameter(Mandatory=$true)]
+    [String]
+    $AccountName,
+
+    [parameter(Mandatory=$true)]
+    [String]
+    $RoleName,
+
+    [parameter(Mandatory=$true)]
+    [String]
+    $ServicePrincipalId
+
+    )
+    $purviewRoles = @{
+        "Collection admins" = "purviewmetadatarole_builtin_collection-administrator:$($purviewAccountName)"
+        "Data readers" = "purviewmetadatarole_builtin_purview-reader:$($purviewAccountName)"
+        "Data curators" = "purviewmetadatarole_builtin_data-curator:$($purviewAccountName)"
+        "Data source admins" = "purviewmetadatarole_builtin_data-source-administrator:$($purviewAccountName)"
+        "Insights readers" = "purviewmetadatarole_builtin_insights-reader:$($purviewAccountName)"
+        "Policy authors" = "purviewmetadatarole_builtin_policy-author:$($purviewAccountName)"
+        "Workflow admins" = "purviewmetadatarole_builtin_workflow-administrator:$($purviewAccountName)"
+    }
+
+    $purviewPolicy = Get-MetadataPolicy -AccountName $AccountName
+    
+    foreach ($attributeRule in $purviewPolicy.properties.attributeRules) {
+        if ($attributeRule.name -eq $purviewRoles[$RoleName]) {
+                $attributeRule.dnfCondition[0][0].attributeValueIncludedIn += $ServicePrincipalId
+        }
+    }
+
+    $url = "$rootUrl/policyStore/metadataPolicies/$($purviewPolicy.id)?api-version=2021-07-01-preview"
+        
+    Invoke-RestMethod -Method PUT -Uri $url -Headers @{"Authorization"="Bearer $global:purviewToken"} -Body (ConvertTo-Json $purviewPolicy -Depth 20) -ContentType "application/json"
+}

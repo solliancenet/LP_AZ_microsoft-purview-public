@@ -1,8 +1,9 @@
 . .\automation.ps1
 
 $location = "eastus";
-$suffix = GetRandomString -Length 10 -IncludeCaps $false;
+$suffix = GetRandomString -Length 10
 $sqlAdminPassword = (GetRandomString -Length 10) + "!123"
+
 $resourceGroupName = "msftpurview-$suffix"
 $aadUserName = (Get-AzContext).Account.Id
 $aadUserId = (Get-AzADUser -UserPrincipalName (Get-AzContext).Account).Id
@@ -96,7 +97,7 @@ $dataLakeStorageBlobUrl = "https://"+ $dataLakeAccountName + ".blob.core.windows
 $dataLakeStorageAccountKey = (Get-AzStorageAccountKey -ResourceGroupName $resourceGroupName -AccountName $dataLakeAccountName)[0].Value
 $dataLakeContext = New-AzStorageContext -StorageAccountName $dataLakeAccountName -StorageAccountKey $dataLakeStorageAccountKey
 $destinationSasKey = New-AzStorageContainerSASToken -Container "wwi-02" -Context $dataLakeContext -Permission rwdl
-
+$blobStorageAccountKey = (Get-AzStorageAccountKey -ResourceGroupName $resourceGroupName -AccountName $blobStorageAccountName)[0].Value
 
 Write-Information "Copying single files from the public data account..."
 $singleFiles = @{
@@ -183,6 +184,55 @@ Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
 
 Write-Information "Create Blob Storage linked service $($blobStorageAccountName)"
 
-$blobStorageAccountKey = List-StorageAccountKeys -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName -Name $blobStorageAccountName
 $result = Create-BlobStorageLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $blobStorageAccountName  -Key $blobStorageAccountKey
 Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+
+Write-Information "Create linked service for SQL pool $($sqlPoolName) with user asa.sql.admin"
+
+$linkedServiceName = $sqlPoolName.ToLower()
+$result = Create-SQLPoolKeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $linkedServiceName -DatabaseName $sqlPoolName `
+                 -UserName "asa.sql.admin" -KeyVaultLinkedServiceName $keyVaultName -SecretName $keyVaultSQLUserSecretName
+Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+
+Write-Information "Create linked service for SQL pool $($sqlPoolName) with user asa.sql.highperf"
+
+$linkedServiceName = "$($sqlPoolName.ToLower())_highperf"
+$result = Create-SQLPoolKeyVaultLinkedService -TemplatesPath $templatesPath -WorkspaceName $workspaceName -Name $linkedServiceName -DatabaseName $sqlPoolName `
+                 -UserName "asa.sql.highperf" -KeyVaultLinkedServiceName $keyVaultName -SecretName $keyVaultSQLUserSecretName
+Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+
+Write-Information "Create data sets for data load in SQL pool $($sqlPoolName)"
+
+$loadingDatasets = @{
+        wwi02_date_adls = $dataLakeAccountName
+        wwi02_product_adls = $dataLakeAccountName
+        wwi02_sale_small_adls = $dataLakeAccountName
+        wwi02_date_asa = $sqlPoolName.ToLower()
+        wwi02_product_asa = $sqlPoolName.ToLower()
+        wwi02_sale_small_asa = "$($sqlPoolName.ToLower())_highperf"
+}
+
+foreach ($dataset in $loadingDatasets.Keys) {
+        Write-Information "Creating dataset $($dataset)"
+        $result = Create-Dataset -DatasetsPath $datasetsPath -WorkspaceName $workspaceName -Name $dataset -LinkedServiceName $loadingDatasets[$dataset]
+        Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+}
+
+Write-Information "Create pipeline to load the SQL pool"
+
+$params = @{
+        BLOB_STORAGE_LINKED_SERVICE_NAME = $blobStorageAccountName
+}
+$loadingPipelineName = "Import data from data lake"
+$fileName = "load_sql_pool_from_data_lake"
+
+Write-Information "Creating pipeline $($loadingPipelineName)"
+
+$result = Create-Pipeline -PipelinesPath $pipelinesPath -WorkspaceName $workspaceName -Name $loadingPipelineName -FileName $fileName -Parameters $params
+Wait-ForOperation -WorkspaceName $workspaceName -OperationId $result.operationId
+
+Write-Information "Running pipeline $($loadingPipelineName)"
+
+$result = Run-Pipeline -WorkspaceName $workspaceName -Name $loadingPipelineName
+$result = Wait-ForPipelineRun -WorkspaceName $workspaceName -RunId $result.runId
+$result

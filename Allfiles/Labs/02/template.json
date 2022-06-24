@@ -113,6 +113,32 @@
               ],
               "certificates": []
             }
+          },
+          {
+            "tenantId": "[subscription().tenantid]",
+            "objectId": "##SIGNED_IN_USER_ID##",
+            "permissions": {
+              "keys": [],
+              "secrets": [
+                "get",
+                "list",
+                "set"
+              ],
+              "certificates": []
+            }
+          },
+          {
+            "tenantId": "[subscription().tenantid]",
+            "objectId": "##SIGNED_IN_USER_ID##",
+            "permissions": {
+              "keys": [],
+              "secrets": [
+                "get",
+                "list",
+                "set"
+              ],
+              "certificates": []
+            }
           }
         ]
       }
